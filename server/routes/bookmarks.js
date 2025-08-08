@@ -6,7 +6,27 @@ const fetch = require("node-fetch");
 
 const router = express.Router();
 
-// GET bookmarks for logged-in user
+async function fetchSummary(url) {
+  try {
+    const encoded = encodeURIComponent(url);
+    const res = await fetch(`https://r.jina.ai/${encoded}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Jina API error: ${res.status}`);
+    }
+
+    return await res.text();
+  } catch (err) {
+    console.error("Summary fetch failed:", err.message);
+    return "Summary not available.";
+  }
+}
+
+// GET bookmarks
 router.get("/", auth, async (req, res) => {
   try {
     const bookmarks = await Bookmark.find({ userId: req.userId }).sort({ createdAt: -1 });
@@ -16,13 +36,12 @@ router.get("/", auth, async (req, res) => {
   }
 });
 
-// POST new bookmark
+// POST bookmark
 router.post("/", auth, async (req, res) => {
   try {
-    let { url, summary } = req.body;
+    let { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
 
-    // Ensure URL has protocol
     if (!/^https?:\/\//i.test(url)) {
       url = "https://" + url;
     }
@@ -38,12 +57,14 @@ router.post("/", auth, async (req, res) => {
       console.warn("Metadata fetch failed:", err.message);
     }
 
+    const summary = await fetchSummary(url);
+
     const bookmark = await Bookmark.create({
       userId: req.userId,
       url,
       title,
       favicon,
-      summary: summary || "Summary not available.",
+      summary,
     });
 
     res.status(201).json(bookmark);
